@@ -1,29 +1,23 @@
+from skimage.morphology import skeletonize, skeletonize_3d
+import cv2
+import numpy as np
+
 from PIL import Image
 import numpy
+import cv2
 
 from collections import deque
 
 #Binariza a imagem usando o método de Otsu
-def binarize(filename):
-    sourceImage = numpy.asarray(Image.open(filename).convert('L'))
-    threshold = otsu(sourceImage)
-    binary = Image.open(filename).convert('L').point(lambda x: 255 if x > threshold else 0)
-    return binary
+def binarize(original_image):
+    image = original_image.copy()
+    _, binary_image = cv2.threshold(image, 0, 255, cv2.THRESH_OTSU)
+    
+    return binary_image
 
-# Método de Otsu (So ta funcionando se a imagem tiver pelo menos 1 pixel totalmente preto e 1 totalmente branco)
-def otsu(img):
-    hist, bins = numpy.histogram(img, bins=256, range=(0, 256))
-    bins = bins[:-1]
-    w0 = numpy.cumsum(hist)
-    w1 = numpy.cumsum(hist[::-1])[::-1]
-    mu0 = numpy.cumsum(bins * hist) / w0
-    mu1 = (numpy.cumsum((bins * hist)[::-1]) / w1[::-1])[::-1]
-    sigma_b_squared = ((mu0 - mu1) ** 2) * w0 * w1
-    idx = numpy.argmax(sigma_b_squared)
-    return bins[idx]
 
 #Retorna todos os vizinhos com a mesma cor de um pixel
-def neighbors(img, pixel):
+def getNeighbors(img, pixel):
     x, y = pixel
     level = img[x][y]
     neighbors = []
@@ -89,72 +83,109 @@ def checkPixel(img, pixel, level):
     else:
         return False
 
-def checkBorder(img):
+def clearBorder(original_img, color):
+    img = original_img.copy()
     groups = []
     for x in range(0, len(img)):
         if(img[x][0] == 0):
-            groups.append(neighbors(img, (x, 0)))
+            groups.append(getNeighbors(img, (x, 0)))
 
         if(img[x][len(img[0])-1] == 0):
-            groups.append(neighbors(img, (x, len(img[0])-1)))
+            groups.append(getNeighbors(img, (x, len(img[0])-1)))
     
     for y in range(0, len(img[0])):
         if(img[0][y] == 0):
-            groups.append(neighbors(img, (0, y)))
+            groups.append(getNeighbors(img, (0, y)))
 
         if(img[len(img)-1][y] == 0):
-            groups.append(neighbors(img, (len(img)-1, y)))
-    
+            groups.append(getNeighbors(img, (len(img)-1, y)))
+            
     for group in groups:
         for pixel in group:
             x, y = pixel
-            img[x][y] = 200
+            img[x][y] = color
 
     return img
-def paintGroup(img ,group, grayscale):
+
+def colorizeGroup(original_image, group, grayscale):
+    image = original_image.copy()
+
     for pixel in group:
             x, y = pixel
-            img[x][y] = grayscale
+            image[x][y] = grayscale
 
-def pixelsGroups(img):
-    new_image = img.copy()
+    return image
+
+def getGroups(origial_img):
+    image = origial_img.copy()
+
+    #new_image = img.copy()
     groups = []
     
-    for x in range(0, len(new_image)):
-        for y in range(0, len(new_image[0])):
-            if(new_image[x][y] == 0):
-                groups.append(neighbors(new_image, (x, y)))
-                paintGroup(new_image, groups[-1], 1)
+    for x in range(0, len(image)):
+        for y in range(0, len(image[0])):
+            if(image[x][y] == 0):
+                groups.append(getNeighbors(image, (x, y)))
+                image = colorizeGroup(image, groups[-1], 1)
+
     return groups
 
-def groupSize(groups):
-    sizes = []
+
+def floodFill(original_img):
+    gray = original_img.copy()
+
+    # Criando uma máscara com o mesmo tamanho da imagem
+    mask = np.zeros((gray.shape[0] + 2, gray.shape[1] + 2), np.uint8)
+
+    # Definindo o ponto inicial para a inundação (aqui estamos usando o ponto (0, 0))
+    start_point = (0, 0)
+
+    # Definindo a tolerância da inundação
+    # Aqui estamos usando uma tolerância baixa de 10, mas você pode ajustar esse valor conforme necessário
+    tolerance = 10
+
+    # Chamando a função cv2.floodFill()
+    cv2.floodFill(gray, mask, start_point, 0, tolerance)
+
+    return original_img.copy() - gray
+
+def getBounds(groups):
+    groupBounds = []
     for group in groups:
+        minY = group[0][1] 
+        maxY = group[0][1] 
         minX = group[0][0]
-        maxX = group[0][0]
-        minY = group[0][1]
-        maxY = group[0][1]
+        maxX = group[0][0] 
         for pixel in group:
-            if(pixel[0] > maxX):
-                maxX = pixel[0]
-            if(pixel[0] < minX):
-                minX = pixel[0]
-            if(pixel[1] > maxY):
-                maxY = pixel[1]
-            if(pixel[1] < minY):
-                minY = pixel[1]
-        sizes.append((maxX - minX, maxY - minY))
-    return sizes
+            x, y = pixel
+            if(x < minX):
+                minX = x
+            if(x > maxX):
+                maxX = x
+            if(y < minY):
+                minY = y
+            if(y > maxY):
+                maxY = y
+        groupBounds.append((minX, minY, maxX, maxY))
 
-if __name__ == '__main__':
-    #img = numpy.asarray(binarize('gear_hack.png'))
-    img = numpy.asarray(binarize('engrenagens.png'))
-    img_copy = img.copy()
-    img_copy = checkBorder(img_copy)
-    groups = pixelsGroups(img_copy)
-    print(groupSize(groups))
-    #for x in range(0, len(img_copy)):
+    return groupBounds
 
+def createSubImage(group, groupSize):
 
+    print(groupSize)
 
-    Image.fromarray(img_copy).show()
+    width = groupSize[2] - groupSize[0]
+    height = groupSize[3] - groupSize[1]
+
+    minX = groupSize[0]
+    minY = groupSize[1]
+
+    image = np.ones((height, width), np.uint8) * 255
+    print(len(image))
+    print(len(image[0]))
+    for pixel in group:
+        x, y = pixel
+        #print("(" + str(x-minX) + ", " + str(y - minY) + ")")
+        image[x - minX][y - minY] = 0
+	
+    return image
