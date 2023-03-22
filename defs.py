@@ -1,3 +1,4 @@
+import math
 from skimage.morphology import skeletonize, skeletonize_3d
 from scipy.spatial import distance
 import cv2
@@ -192,10 +193,22 @@ def createSubImage(group, groupSize):
 
     return image
 
-def getEccentricity(img):
+def getTips(img):
+    window = np.ones((3, 3), dtype=np.uint8)
+    tips = []
+
+    for i in range(1, len(img[0])):  # x
+        for j in range(2, len(img)): # y
+            if(img[j][i] == 0):
+                window = img[j-1:j+2, i-1:i+2]
+                value = np.sum(np.logical_not(window))
+                if(value == 2):
+                    tips.append((i, j))
+    return tips
+
+def getCenter(img):
     window = np.ones((3, 3), dtype=np.uint8)
     center = (0,0)
-    tips = []
     max = 0
     for i in range(1, len(img[0])):  # x
         for j in range(2, len(img)): # y
@@ -205,8 +218,11 @@ def getEccentricity(img):
                 if(value > max):
                     center = (i, j)
                     max = value
-                if(value == 2):
-                    tips.append((i, j))
+    return center
+
+def getEccentricity(img):
+    tips = getTips(img)
+    center = getCenter(img)
 
     tipsDistance = []
     
@@ -217,7 +233,77 @@ def getEccentricity(img):
     e = (r_max - r_min) / (r_max + r_min)
     return e
     
-    
+
+def checkGroups(img, groups, groupSize):
+    soloGears = []
+    okGears = []
+    gearsTeeths = []
+    for index, group in enumerate(groups):
+        subimg = createSubImage(group, groupSize[index])
+        subimg = floodFill(subimg) # fechamento
+        skeleton = skeletonize(cv2.bitwise_not(subimg))
+        skeleton = cv2.bitwise_not(skeleton.astype('uint8') * 255)
+        #show(subimg)
+        #show(skeleton)
+        e = getEccentricity(skeleton)
+        if(e > 0.2):
+            img = colorizeGroup(img, group, 240)
+        else:
+            soloGears.append(group)
+            okGears.append(checkAngles(skeleton))
+            gearsTeeths.append(getNumberOfTeeths(skeleton))
+
+    return soloGears, okGears, gearsTeeths, img
+
+def trimTips(skeleton):
+    skeleton_copy = skeleton.copy()
+    center = getCenter(skeleton)
+    r = center[0]
+    for x in range(0, len(skeleton[0])):
+            for y in range(0, len(skeleton)):
+                if(skeleton[y][x] == 0):
+                    d =  math.sqrt((x - center[0])**2 + (y - center[1])**2)
+                    if(d > r/2):
+                        skeleton_copy[y][x] = 255
+
+    return skeleton_copy
+
+def getNumberOfTeeths(skeleton):
+    skeleton_copy = trimTips(skeleton)
+    tips = getTips(skeleton_copy)
+    return len(tips)
+
+def checkAngles(skeleton):
+    skeleton_copy = trimTips(skeleton)
+    tips = getTips(skeleton_copy)
+    center = getCenter(skeleton_copy)
+    ref_angle = 360/len(tips)
+    angles = []
+    for tip in tips:
+        h = (1,0)
+        v = (tip[0] - center[0], tip[1] - center[1])
+
+        # Calcula o coseno do ângulo entre a e b
+        angle = np.degrees(np.arccos(np.dot(v, h) / (np.linalg.norm(v) * np.linalg.norm(h))))
+        if(v[1] < 0):
+            angle = 360 - angle
+        angles.append(angle)
+
+    angles.sort()
+    print(ref_angle)
+    print(angles)
+
+    for i in range(0, len(angles)-1):
+        if(angles[i+1] - angles[i] > 1.2 * ref_angle):
+            return False
+    if((360 + angles[0]) - angles[-1] > 1.2 * ref_angle):
+        return False
+    return True
+
+def show(img):
+    cv2.imshow('Resultado', img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
          
 # def vertexDistance(img):
 # 	janela = np.ones((5, 5), dtype=np.uint8)

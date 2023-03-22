@@ -5,7 +5,7 @@ from skimage.morphology import skeletonize, skeletonize_3d
 import defs
 
 if __name__ == '__main__':
-    image = cv2.imread("images/teste3.png", 0)
+    image = cv2.imread("images/teste15.png", 0)
     binary_image = defs.binarize(image)
     print("binarizou")
     
@@ -13,7 +13,7 @@ if __name__ == '__main__':
     print("limpou a borda")
 
     #nohole_image = defs.floodFill(noborder_image)
-
+    defs.show(noborder_image)
     print("Antes da segmentação")
 
     groups = defs.getGroups(noborder_image)
@@ -22,15 +22,18 @@ if __name__ == '__main__':
 
     print("Antes da excentricidade")
     
-    for index, group in enumerate(groups):
-        subimg = defs.createSubImage(group, groupSize[index])
-        subimg = defs.floodFill(subimg) # fechamento
-        skeleton = skeletonize(cv2.bitwise_not(subimg))
-        skeleton = cv2.bitwise_not(skeleton.astype('uint8') * 255)
-        e = defs.getEccentricity(skeleton)
-        if(e > 0.2):
-            noborder_image = defs.colorizeGroup(noborder_image, group, 170)
-        print(str(index) + " - " + str(e))
+    soloGears, okGears, gearsTeeths, noborder_image  = defs.checkGroups(noborder_image, groups, groupSize)
+    print(okGears)
+    for i, group in enumerate(soloGears):
+        if(not okGears[i]):
+            noborder_image = defs.colorizeGroup(noborder_image, group, 100)
+    
+
+
+
+
+
+    
         
 
     # skeleton = skeletonize(cv2.bitwise_not(subimg))
@@ -38,8 +41,9 @@ if __name__ == '__main__':
     # print(defs.getEccentricity(skeleton))
     #skeleton_binary = defs.binarize(skeleton)
     
-    cv2.imshow('Resultado', cv2.resize(noborder_image, (1000, 500)))
-    #cv2.imwrite('points1.png', skeleton)
+    #cv2.imshow('Resultado', cv2.resize(noborder_image, (1000, 500)))
+    cv2.imshow('Resultado', noborder_image)
+    #cv2.imwrite('resultado3.png', noborder_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
     #distance = defs.ellementoestruturanteflamengoganhoudovasco(skeleton) #testar
