@@ -1,51 +1,40 @@
-from PIL import Image
 import cv2
-from skimage.morphology import skeletonize, skeletonize_3d
-
 import defs
 
 if __name__ == '__main__':
-    image = cv2.imread("images/teste15.png", 0)
-    binary_image = defs.binarize(image)
-    print("binarizou")
+    print("Binarizando a imagem...")
+    rawImage = cv2.imread("images/gearmenor.png", 0)
+    binaryImage = defs.binarize(rawImage)
     
-    noborder_image = defs.clearBorder(binary_image, 240)
-    print("limpou a borda")
-
-    #nohole_image = defs.floodFill(noborder_image)
-    defs.show(noborder_image)
-    print("Antes da segmentação")
-
-    groups = defs.getGroups(noborder_image)
+    print("Limpando a borda da imagem...")
+    borderObjects = defs.getBorderObjects(binaryImage)
+    noBorderImage = binaryImage.copy()
+    for object in borderObjects:
+        noBorderImage = defs.colorizeObject(noBorderImage, object, 255)
     
-    groupSize = defs.getBounds(groups)
+    print("Segmentando...")
+    objects = defs.getObjects(noBorderImage)
+    objectBounds = defs.getBounds(objects)
 
-    print("Antes da excentricidade")
-    
-    soloGears, okGears, gearsTeeths, noborder_image  = defs.checkGroups(noborder_image, groups, groupSize)
-    print(okGears)
-    for i, group in enumerate(soloGears):
-        if(not okGears[i]):
-            noborder_image = defs.colorizeGroup(noborder_image, group, 100)
-    
+    print("Classificando engrenangens...")
+    approvedGears, reprovedGears, undefinedGears, gearsTeeths  = defs.checkObjects(objects, objectBounds)
 
-
-
-
-
-    
+    print("Gerando imagem final...")
+    finalImamge = cv2.cvtColor(noBorderImage, cv2.COLOR_GRAY2RGB)
+    for index, object in enumerate(objects):
+        if approvedGears[index]:
+            finalImamge = defs.colorizeObject(finalImamge, object, [123, 177, 22])
+        if reprovedGears[index]:
+            finalImamge = defs.colorizeObject(finalImamge, object, [130, 150, 231])
+        if undefinedGears[index]:
+            finalImamge = defs.colorizeObject(finalImamge, object, [230, 230, 230])
+    for object in borderObjects:
+        finalImamge = defs.colorizeObject(finalImamge, object, [230, 230, 230])
         
 
-    # skeleton = skeletonize(cv2.bitwise_not(subimg))
-    # skeleton = cv2.bitwise_not(skeleton.astype('uint8') * 255)
-    # print(defs.getEccentricity(skeleton))
-    #skeleton_binary = defs.binarize(skeleton)
-    
-    #cv2.imshow('Resultado', cv2.resize(noborder_image, (1000, 500)))
-    cv2.imshow('Resultado', noborder_image)
-    #cv2.imwrite('resultado3.png', noborder_image)
+    cv2.imshow('Resultado', finalImamge)
+    #cv2.imwrite('resultado5.png', finalImamge)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-    #distance = defs.ellementoestruturanteflamengoganhoudovasco(skeleton) #testar
-    #print(distance)
+
     
