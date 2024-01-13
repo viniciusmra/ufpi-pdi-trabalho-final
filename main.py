@@ -3,7 +3,7 @@ from core import binarize, checkObjects, colorizeObject, getBorderObjects, getBo
 
 if __name__ == '__main__':
     print("Binarizando a imagem...")
-    rawImage = cv2.imread("images/gearmenor.png", 0)
+    rawImage = cv2.imread("images/teste15.png", 0)
     binaryImage = binarize(rawImage)
     
     print("Limpando a borda da imagem...")
